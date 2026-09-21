@@ -18,7 +18,10 @@ import android.widget.TextView;
 import android.widget.Toast;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.DatagramPacket;
+import java.net.DatagramSocket;
 import java.net.HttpURLConnection;
+import java.net.InetAddress;
 import java.net.URL;
 import java.net.URLEncoder;
 
@@ -30,6 +33,7 @@ public class MainActivity extends Activity {
     private TextView txtNombreArchivo, txtTamanoArchivo;
     private Uri archivoPendiente = null;
     private boolean ignorarCambio = false;
+    private DatagramSocket udpSocket = null;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -37,7 +41,6 @@ public class MainActivity extends Activity {
         Intent intent = getIntent();
         boolean pedirConfirmacion = prefs.getBoolean("pedir_confirmacion", false);
 
-        // Si se abrió para compartir un archivo
         if (Intent.ACTION_SEND.equals(intent.getAction()) && intent.getType() != null) {
             Uri uri = intent.getParcelableExtra(Intent.EXTRA_STREAM);
             if (uri != null) {
@@ -49,7 +52,6 @@ public class MainActivity extends Activity {
             }
         }
 
-        // Si vamos a mostrar interfaz, activamos el tema moderno oscuro
         setTheme(android.R.style.Theme_DeviceDefault_NoActionBar);
         super.onCreate(savedInstanceState);
         inicializarUI();
@@ -111,7 +113,12 @@ public class MainActivity extends Activity {
             }
         });
 
-        // Logica para Teclado en Vivo con soporte de BORRAR
+        // Crear socket UDP reutilizable
+        new Thread(() -> {
+            try { udpSocket = new DatagramSocket(); } catch (Exception ignored) {}
+        }).start();
+
+        // Logica Teclado en Vivo
         txtTecladoEnVivo.setText(" ");
         txtTecladoEnVivo.setSelection(1);
         txtTecladoEnVivo.addTextChangedListener(new TextWatcher() {
@@ -124,41 +131,40 @@ public class MainActivity extends Activity {
                 String actual = s.toString();
 
                 if (actual.isEmpty()) {
-                    // El usuario presionó BORRAR (Backspace)
-                    enviarTecla("__BACKSPACE__");
-                    resetearTecladoEnVivo();
+                    enviarTeclaUDP("__BACKSPACE__");
+                    resetearTeclado();
                 } else if (actual.length() > 1) {
-                    // El usuario escribió un caracter
                     String nuevaLetra = actual.substring(1);
-                    enviarTecla(nuevaLetra);
-                    resetearTecladoEnVivo();
+                    enviarTeclaUDP(nuevaLetra);
+                    resetearTeclado();
                 }
             }
         });
     }
 
-    private void resetearTecladoEnVivo() {
+    private void resetearTeclado() {
         ignorarCambio = true;
         txtTecladoEnVivo.setText(" ");
         txtTecladoEnVivo.setSelection(1);
         ignorarCambio = false;
     }
 
-    private void enviarTecla(String tecla) {
+    // DISPARO DIRECTO UDP (1ms de latencia)
+    private void enviarTeclaUDP(String tecla) {
         String ip = prefs.getString("pc_ip", "");
         if (ip.isEmpty()) return;
         new Thread(() -> {
             try {
-                URL url = new URL("http://" + ip + ":8080/tecla");
-                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-                conn.setRequestMethod("POST");
-                conn.setDoOutput(true);
-                conn.setConnectTimeout(1000);
-                OutputStream out = conn.getOutputStream();
-                out.write(tecla.getBytes("UTF-8"));
-                out.flush();
-                out.close();
-                conn.getResponseCode();
+                byte[] datos = tecla.getBytes("UTF-8");
+                InetAddress destino = InetAddress.getByName(ip);
+                DatagramPacket paquete = new DatagramPacket(datos, datos.length, destino, 8081);
+                if (udpSocket != null) {
+                    udpSocket.send(paquete);
+                } else {
+                    DatagramSocket s = new DatagramSocket();
+                    s.send(paquete);
+                    s.close();
+                }
             } catch (Exception ignored) {}
         }).start();
     }
@@ -218,7 +224,7 @@ public class MainActivity extends Activity {
             HttpURLConnection conn = null;
             try {
                 in = getContentResolver().openInputStream(uri);
-                if (in == null) throw new Exception("No se pudo leer el archivo");
+                if (in == null) throw new Exception("No se pudo leer");
 
                 URL url = new URL("http://" + ip + ":8080/");
                 conn = (HttpURLConnection) url.openConnection();
