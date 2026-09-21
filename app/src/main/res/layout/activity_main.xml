@@ -19,6 +19,66 @@
             android:textStyle="bold"
             android:layout_marginBottom="16dp" />
 
+        <!-- Tarjeta de Confirmacion (Comprobador) -->
+        <LinearLayout
+            android:id="@+id/cardConfirmacion"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="#1E293B"
+            android:padding="16dp"
+            android:visibility="gone"
+            android:layout_marginBottom="20dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Archivo Listo Para Enviar"
+                android:textColor="#38BDF8"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/txtNombreArchivo"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="archivo.ext"
+                android:textColor="#FFFFFF"
+                android:textSize="16sp"
+                android:layout_marginTop="8dp" />
+
+            <TextView
+                android:id="@+id/txtTamanoArchivo"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Peso: 0 KB"
+                android:textColor="#94A3B8"
+                android:textSize="13sp"
+                android:layout_marginBottom="12dp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <Button
+                    android:id="@+id/btnCancelarEnvio"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Cancelar"
+                    android:layout_marginEnd="8dp" />
+
+                <Button
+                    android:id="@+id/btnConfirmarEnvio"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Enviar" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Seccion IP -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -30,7 +90,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:layout_marginBottom="24dp">
+            android:layout_marginBottom="16dp">
 
             <EditText
                 android:id="@+id/txtIp"
@@ -39,8 +99,7 @@
                 android:layout_weight="1"
                 android:hint="192.168.1.XX"
                 android:textColor="#FFFFFF"
-                android:textColorHint="#555555"
-                android:inputType="text" />
+                android:textColorHint="#555555" />
 
             <Button
                 android:id="@+id/btnGuardarIp"
@@ -49,6 +108,25 @@
                 android:text="Guardar" />
         </LinearLayout>
 
+        <!-- Interruptor: Comprobador de envios -->
+        <Switch
+            android:id="@+id/swConfirmar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Pedir confirmación antes de enviar"
+            android:textColor="#FFFFFF"
+            android:textSize="14sp"
+            android:layout_marginBottom="24dp" />
+
+        <!-- Boton seleccionar archivo -->
+        <Button
+            android:id="@+id/btnSeleccionarArchivo"
+            android:layout_width="match_parent"
+            android:layout_height="50dp"
+            android:text="📎 Seleccionar archivo para enviar"
+            android:layout_marginBottom="24dp" />
+
+        <!-- Teclado remoto -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -59,7 +137,7 @@
         <EditText
             android:id="@+id/txtMensaje"
             android:layout_width="match_parent"
-            android:layout_height="120dp"
+            android:layout_height="90dp"
             android:gravity="top|start"
             android:background="#1E1E1E"
             android:padding="12dp"
@@ -71,7 +149,7 @@
         <Button
             android:id="@+id/btnEnviarTexto"
             android:layout_width="match_parent"
-            android:layout_height="55dp"
+            android:layout_height="50dp"
             android:text="Enviar y Teclear en PC" />
 
     </LinearLayout>
