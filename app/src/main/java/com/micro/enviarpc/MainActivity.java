@@ -7,11 +7,13 @@ import android.database.Cursor;
 import android.net.Uri;
 import android.os.Bundle;
 import android.provider.OpenableColumns;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.view.View;
 import android.widget.Button;
+import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.LinearLayout;
-import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
 import java.io.InputStream;
@@ -22,44 +24,48 @@ import java.net.URLEncoder;
 
 public class MainActivity extends Activity {
     private SharedPreferences prefs;
-    private EditText txtIp, txtMensaje;
-    private Switch swConfirmar;
+    private EditText txtIp, txtMensaje, txtTecladoEnVivo;
+    private CheckBox chkConfirmar;
     private LinearLayout cardConfirmacion;
     private TextView txtNombreArchivo, txtTamanoArchivo;
     private Uri archivoPendiente = null;
+    private boolean ignorarCambio = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
         prefs = getSharedPreferences("config", MODE_PRIVATE);
-
         Intent intent = getIntent();
         boolean pedirConfirmacion = prefs.getBoolean("pedir_confirmacion", false);
 
+        // Si se abrió para compartir un archivo
         if (Intent.ACTION_SEND.equals(intent.getAction()) && intent.getType() != null) {
             Uri uri = intent.getParcelableExtra(Intent.EXTRA_STREAM);
             if (uri != null) {
                 if (!pedirConfirmacion) {
-                    // Modo silencioso: no cargamos interfaz, enviamos directo
+                    super.onCreate(savedInstanceState);
                     enviarArchivo(uri, true);
-                    return;
-                } else {
-                    // Modo comprobador: mostramos la UI
-                    inicializarUI();
-                    mostrarTarjetaArchivo(uri);
                     return;
                 }
             }
         }
 
+        // Si vamos a mostrar interfaz, activamos el tema moderno oscuro
+        setTheme(android.R.style.Theme_DeviceDefault_NoActionBar);
+        super.onCreate(savedInstanceState);
         inicializarUI();
+
+        if (Intent.ACTION_SEND.equals(intent.getAction()) && intent.getType() != null) {
+            Uri uri = intent.getParcelableExtra(Intent.EXTRA_STREAM);
+            if (uri != null) mostrarTarjetaArchivo(uri);
+        }
     }
 
     private void inicializarUI() {
         setContentView(R.layout.activity_main);
         txtIp = findViewById(R.id.txtIp);
         txtMensaje = findViewById(R.id.txtMensaje);
-        swConfirmar = findViewById(R.id.swConfirmar);
+        txtTecladoEnVivo = findViewById(R.id.txtTecladoEnVivo);
+        chkConfirmar = findViewById(R.id.chkConfirmar);
         cardConfirmacion = findViewById(R.id.cardConfirmacion);
         txtNombreArchivo = findViewById(R.id.txtNombreArchivo);
         txtTamanoArchivo = findViewById(R.id.txtTamanoArchivo);
@@ -71,9 +77,9 @@ public class MainActivity extends Activity {
         Button btnCancelarEnvio = findViewById(R.id.btnCancelarEnvio);
 
         txtIp.setText(prefs.getString("pc_ip", ""));
-        swConfirmar.setChecked(prefs.getBoolean("pedir_confirmacion", false));
+        chkConfirmar.setChecked(prefs.getBoolean("pedir_confirmacion", false));
 
-        swConfirmar.setOnCheckedChangeListener((b, isChecked) -> {
+        chkConfirmar.setOnCheckedChangeListener((b, isChecked) -> {
             prefs.edit().putBoolean("pedir_confirmacion", isChecked).apply();
         });
 
@@ -84,7 +90,7 @@ public class MainActivity extends Activity {
 
         btnEnviarTexto.setOnClickListener(v -> {
             String texto = txtMensaje.getText().toString();
-            if (!texto.isEmpty()) enviarTexto(texto);
+            if (!texto.isEmpty()) enviarTextoBloque(texto);
         });
 
         btnSeleccionarArchivo.setOnClickListener(v -> {
@@ -94,9 +100,7 @@ public class MainActivity extends Activity {
         });
 
         btnConfirmarEnvio.setOnClickListener(v -> {
-            if (archivoPendiente != null) {
-                enviarArchivo(archivoPendiente, false);
-            }
+            if (archivoPendiente != null) enviarArchivo(archivoPendiente, false);
         });
 
         btnCancelarEnvio.setOnClickListener(v -> {
@@ -106,6 +110,80 @@ public class MainActivity extends Activity {
                 finish();
             }
         });
+
+        // Logica para Teclado en Vivo con soporte de BORRAR
+        txtTecladoEnVivo.setText(" ");
+        txtTecladoEnVivo.setSelection(1);
+        txtTecladoEnVivo.addTextChangedListener(new TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            @Override public void onTextChanged(CharSequence s, int start, int before, int count) {}
+
+            @Override
+            public void afterTextChanged(Editable s) {
+                if (ignorarCambio) return;
+                String actual = s.toString();
+
+                if (actual.isEmpty()) {
+                    // El usuario presionó BORRAR (Backspace)
+                    enviarTecla("__BACKSPACE__");
+                    resetearTecladoEnVivo();
+                } else if (actual.length() > 1) {
+                    // El usuario escribió un caracter
+                    String nuevaLetra = actual.substring(1);
+                    enviarTecla(nuevaLetra);
+                    resetearTecladoEnVivo();
+                }
+            }
+        });
+    }
+
+    private void resetearTecladoEnVivo() {
+        ignorarCambio = true;
+        txtTecladoEnVivo.setText(" ");
+        txtTecladoEnVivo.setSelection(1);
+        ignorarCambio = false;
+    }
+
+    private void enviarTecla(String tecla) {
+        String ip = prefs.getString("pc_ip", "");
+        if (ip.isEmpty()) return;
+        new Thread(() -> {
+            try {
+                URL url = new URL("http://" + ip + ":8080/tecla");
+                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                conn.setRequestMethod("POST");
+                conn.setDoOutput(true);
+                conn.setConnectTimeout(1000);
+                OutputStream out = conn.getOutputStream();
+                out.write(tecla.getBytes("UTF-8"));
+                out.flush();
+                out.close();
+                conn.getResponseCode();
+            } catch (Exception ignored) {}
+        }).start();
+    }
+
+    private void enviarTextoBloque(String texto) {
+        String ip = prefs.getString("pc_ip", "");
+        new Thread(() -> {
+            try {
+                URL url = new URL("http://" + ip + ":8080/texto");
+                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                conn.setRequestMethod("POST");
+                conn.setDoOutput(true);
+                conn.setConnectTimeout(2000);
+                OutputStream out = conn.getOutputStream();
+                out.write(texto.getBytes("UTF-8"));
+                out.flush();
+                out.close();
+                if (conn.getResponseCode() == 200) {
+                    runOnUiThread(() -> {
+                        Toast.makeText(this, "✓ Escrito en PC", Toast.LENGTH_SHORT).show();
+                        txtMensaje.setText("");
+                    });
+                }
+            } catch (Exception ignored) {}
+        }).start();
     }
 
     @Override
@@ -120,7 +198,6 @@ public class MainActivity extends Activity {
         archivoPendiente = uri;
         String nombre = obtenerNombre(uri);
         long tamano = obtenerTamano(uri);
-
         txtNombreArchivo.setText(nombre);
         txtTamanoArchivo.setText("Peso: " + formatearTamano(tamano));
         cardConfirmacion.setVisibility(View.VISIBLE);
@@ -130,7 +207,6 @@ public class MainActivity extends Activity {
         String ip = prefs.getString("pc_ip", "");
         if (ip.isEmpty()) {
             Toast.makeText(this, "Configura la IP de la PC primero", Toast.LENGTH_LONG).show();
-            inicializarUI();
             return;
         }
 
@@ -141,7 +217,6 @@ public class MainActivity extends Activity {
             OutputStream out = null;
             HttpURLConnection conn = null;
             try {
-                // Abrir stream de inmediato antes de que el sistema pause permisos
                 in = getContentResolver().openInputStream(uri);
                 if (in == null) throw new Exception("No se pudo leer el archivo");
 
@@ -150,15 +225,12 @@ public class MainActivity extends Activity {
                 conn.setRequestMethod("POST");
                 conn.setDoOutput(true);
                 conn.setConnectTimeout(4000);
-                conn.setReadTimeout(15000);
                 conn.setRequestProperty("X-Filename", URLEncoder.encode(nombreArchivo, "UTF-8"));
 
                 out = conn.getOutputStream();
                 byte[] b = new byte[8192];
                 int len;
-                while ((len = in.read(b)) != -1) {
-                    out.write(b, 0, len);
-                }
+                while ((len = in.read(b)) != -1) out.write(b, 0, len);
                 out.flush();
 
                 if (conn.getResponseCode() == 200) {
@@ -166,44 +238,14 @@ public class MainActivity extends Activity {
                         Toast.makeText(this, "✓ Enviado: " + nombreArchivo, Toast.LENGTH_SHORT).show();
                         if (cardConfirmacion != null) cardConfirmacion.setVisibility(View.GONE);
                     });
-                } else {
-                    throw new Exception("PC respondió error: " + conn.getResponseCode());
                 }
             } catch (Exception e) {
-                String error = e.getMessage() != null ? e.getMessage() : "Fallo de conexión";
-                runOnUiThread(() -> Toast.makeText(this, "Error: " + error, Toast.LENGTH_LONG).show());
+                runOnUiThread(() -> Toast.makeText(this, "Error al enviar", Toast.LENGTH_SHORT).show());
             } finally {
                 try { if (out != null) out.close(); } catch (Exception ignored) {}
                 try { if (in != null) in.close(); } catch (Exception ignored) {}
                 if (conn != null) conn.disconnect();
                 if (cerrarAlFinal) runOnUiThread(this::finish);
-            }
-        }).start();
-    }
-
-    private void enviarTexto(String texto) {
-        String ip = prefs.getString("pc_ip", "");
-        new Thread(() -> {
-            try {
-                URL url = new URL("http://" + ip + ":8080/texto");
-                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-                conn.setRequestMethod("POST");
-                conn.setDoOutput(true);
-                conn.setConnectTimeout(2000);
-
-                OutputStream out = conn.getOutputStream();
-                out.write(texto.getBytes("UTF-8"));
-                out.flush();
-                out.close();
-
-                if (conn.getResponseCode() == 200) {
-                    runOnUiThread(() -> {
-                        Toast.makeText(this, "✓ Escrito en PC", Toast.LENGTH_SHORT).show();
-                        txtMensaje.setText("");
-                    });
-                }
-            } catch (Exception e) {
-                runOnUiThread(() -> Toast.makeText(this, "Error al conectar", Toast.LENGTH_SHORT).show());
             }
         }).start();
     }

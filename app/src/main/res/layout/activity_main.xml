@@ -14,12 +14,12 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="Mandar a PC"
-            android:textColor="#FFFFFF"
+            android:textColor="#38BDF8"
             android:textSize="22sp"
             android:textStyle="bold"
             android:layout_marginBottom="16dp" />
 
-        <!-- Tarjeta de Confirmacion (Comprobador) -->
+        <!-- Tarjeta de Confirmacion -->
         <LinearLayout
             android:id="@+id/cardConfirmacion"
             android:layout_width="match_parent"
@@ -108,15 +108,15 @@
                 android:text="Guardar" />
         </LinearLayout>
 
-        <!-- Interruptor: Comprobador de envios -->
-        <Switch
-            android:id="@+id/swConfirmar"
+        <!-- Casilla CheckBox bien visible -->
+        <CheckBox
+            android:id="@+id/chkConfirmar"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="Pedir confirmación antes de enviar"
             android:textColor="#FFFFFF"
             android:textSize="14sp"
-            android:layout_marginBottom="24dp" />
+            android:layout_marginBottom="20dp" />
 
         <!-- Boton seleccionar archivo -->
         <Button
@@ -126,31 +126,52 @@
             android:text="📎 Seleccionar archivo para enviar"
             android:layout_marginBottom="24dp" />
 
-        <!-- Teclado remoto -->
+        <!-- TECLADO EN VIVO -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Escribir en la PC"
+            android:text="⌨ Teclado en Vivo (Escribe y borra directo en PC)"
+            android:textColor="#38BDF8"
+            android:textSize="13sp"
+            android:textStyle="bold" />
+
+        <EditText
+            android:id="@+id/txtTecladoEnVivo"
+            android:layout_width="match_parent"
+            android:layout_height="50dp"
+            android:background="#1E1E1E"
+            android:padding="10dp"
+            android:hint="Toca aquí y escribe... (soporta Borrar)"
+            android:textColor="#FFFFFF"
+            android:textColorHint="#555555"
+            android:layout_marginTop="6dp"
+            android:layout_marginBottom="24dp" />
+
+        <!-- TEXTO EN BLOQUE -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Enviar texto largo en bloque"
             android:textColor="#9E9E9E"
             android:textSize="12sp" />
 
         <EditText
             android:id="@+id/txtMensaje"
             android:layout_width="match_parent"
-            android:layout_height="90dp"
+            android:layout_height="80dp"
             android:gravity="top|start"
             android:background="#1E1E1E"
-            android:padding="12dp"
-            android:hint="Escribe cualquier texto aquí..."
+            android:padding="10dp"
+            android:hint="Pega párrafos largos aquí..."
             android:textColor="#FFFFFF"
             android:textColorHint="#555555"
-            android:layout_marginBottom="12dp" />
+            android:layout_marginBottom="10dp" />
 
         <Button
             android:id="@+id/btnEnviarTexto"
             android:layout_width="match_parent"
             android:layout_height="50dp"
-            android:text="Enviar y Teclear en PC" />
+            android:text="Enviar Bloque de Texto" />
 
     </LinearLayout>
 </ScrollView>
