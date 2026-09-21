@@ -36,16 +36,15 @@ public class MainActivity extends Activity {
         Intent intent = getIntent();
         boolean pedirConfirmacion = prefs.getBoolean("pedir_confirmacion", false);
 
-        // Si se abrió por el menú "Compartir" de Android
         if (Intent.ACTION_SEND.equals(intent.getAction()) && intent.getType() != null) {
             Uri uri = intent.getParcelableExtra(Intent.EXTRA_STREAM);
             if (uri != null) {
                 if (!pedirConfirmacion) {
-                    // Modo rápido sin interfaz
+                    // Modo silencioso: no cargamos interfaz, enviamos directo
                     enviarArchivo(uri, true);
                     return;
                 } else {
-                    // Modo comprobador activado: abrimos la interfaz y cargamos la tarjeta
+                    // Modo comprobador: mostramos la UI
                     inicializarUI();
                     mostrarTarjetaArchivo(uri);
                     return;
@@ -130,37 +129,53 @@ public class MainActivity extends Activity {
     private void enviarArchivo(Uri uri, boolean cerrarAlFinal) {
         String ip = prefs.getString("pc_ip", "");
         if (ip.isEmpty()) {
-            Toast.makeText(this, "Guarda la IP primero", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "Configura la IP de la PC primero", Toast.LENGTH_LONG).show();
+            inicializarUI();
             return;
         }
 
         String nombreArchivo = obtenerNombre(uri);
 
         new Thread(() -> {
+            InputStream in = null;
+            OutputStream out = null;
+            HttpURLConnection conn = null;
             try {
+                // Abrir stream de inmediato antes de que el sistema pause permisos
+                in = getContentResolver().openInputStream(uri);
+                if (in == null) throw new Exception("No se pudo leer el archivo");
+
                 URL url = new URL("http://" + ip + ":8080/");
-                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                conn = (HttpURLConnection) url.openConnection();
                 conn.setRequestMethod("POST");
                 conn.setDoOutput(true);
-                conn.setConnectTimeout(3000);
+                conn.setConnectTimeout(4000);
+                conn.setReadTimeout(15000);
                 conn.setRequestProperty("X-Filename", URLEncoder.encode(nombreArchivo, "UTF-8"));
 
-                InputStream in = getContentResolver().openInputStream(uri);
-                OutputStream out = conn.getOutputStream();
+                out = conn.getOutputStream();
                 byte[] b = new byte[8192];
                 int len;
-                while ((len = in.read(b)) != -1) out.write(b, 0, len);
-                out.flush(); out.close(); in.close();
+                while ((len = in.read(b)) != -1) {
+                    out.write(b, 0, len);
+                }
+                out.flush();
 
                 if (conn.getResponseCode() == 200) {
                     runOnUiThread(() -> {
                         Toast.makeText(this, "✓ Enviado: " + nombreArchivo, Toast.LENGTH_SHORT).show();
                         if (cardConfirmacion != null) cardConfirmacion.setVisibility(View.GONE);
                     });
+                } else {
+                    throw new Exception("PC respondió error: " + conn.getResponseCode());
                 }
             } catch (Exception e) {
-                runOnUiThread(() -> Toast.makeText(this, "Error al enviar archivo", Toast.LENGTH_SHORT).show());
+                String error = e.getMessage() != null ? e.getMessage() : "Fallo de conexión";
+                runOnUiThread(() -> Toast.makeText(this, "Error: " + error, Toast.LENGTH_LONG).show());
             } finally {
+                try { if (out != null) out.close(); } catch (Exception ignored) {}
+                try { if (in != null) in.close(); } catch (Exception ignored) {}
+                if (conn != null) conn.disconnect();
                 if (cerrarAlFinal) runOnUiThread(this::finish);
             }
         }).start();
@@ -178,7 +193,8 @@ public class MainActivity extends Activity {
 
                 OutputStream out = conn.getOutputStream();
                 out.write(texto.getBytes("UTF-8"));
-                out.flush(); out.close();
+                out.flush();
+                out.close();
 
                 if (conn.getResponseCode() == 200) {
                     runOnUiThread(() -> {
