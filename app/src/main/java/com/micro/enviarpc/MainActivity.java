@@ -3,13 +3,16 @@ package com.micro.enviarpc;
 import android.app.Activity;
 import android.content.ClipData;
 import android.content.ClipboardManager;
+import android.content.ContentValues;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.database.Cursor;
 import android.graphics.Color;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
+import android.provider.MediaStore;
 import android.provider.OpenableColumns;
 import android.text.Editable;
 import android.text.TextWatcher;
@@ -266,7 +269,6 @@ public class MainActivity extends Activity {
                 OutputStream out = socket.getOutputStream();
                 String ipRemota = socket.getInetAddress().getHostAddress();
 
-                // Leer encabezados HTTP de forma segura
                 ByteArrayOutputStream headerBytes = new ByteArrayOutputStream();
                 int b, stage = 0;
                 while ((b = in.read()) != -1) {
@@ -341,7 +343,7 @@ public class MainActivity extends Activity {
     }
 
     private void mostrarTarjetaTextoRecibido(String texto, String ip) {
-        txtNombreArchivo.setText("Texto recibido de: " + ip);
+        txtNombreArchivo.setText("Texto de: " + ip);
         txtTamanoArchivo.setText(texto);
         btnConfirmarEnvio.setText("📋 COPIAR");
         btnCancelarEnvio.setText("Descartar");
@@ -383,34 +385,50 @@ public class MainActivity extends Activity {
         });
     }
 
+    // GUARDADO COMPATIBLE CON ANDROID 10+ (MediaStore)
     private void guardarArchivoDescargas(File temp, String filename) {
         new Thread(() -> {
+            OutputStream out = null;
+            FileInputStream in = null;
             try {
-                File dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
-                if (!dir.exists()) dir.mkdirs();
-
-                File dest = new File(dir, filename);
-                int count = 1;
-                String base = filename.contains(".") ? filename.substring(0, filename.lastIndexOf('.')) : filename;
-                String ext = filename.contains(".") ? filename.substring(filename.lastIndexOf('.')) : "";
-                while (dest.exists()) {
-                    dest = new File(dir, base + "_" + count + ext);
-                    count++;
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    ContentValues values = new ContentValues();
+                    values.put(MediaStore.Downloads.DISPLAY_NAME, filename);
+                    values.put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS);
+                    Uri uri = getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
+                    if (uri == null) throw new Exception("Error al crear entrada en MediaStore");
+                    out = getContentResolver().openOutputStream(uri);
+                } else {
+                    File dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
+                    if (!dir.exists()) dir.mkdirs();
+                    File dest = new File(dir, filename);
+                    int count = 1;
+                    String base = filename.contains(".") ? filename.substring(0, filename.lastIndexOf('.')) : filename;
+                    String ext = filename.contains(".") ? filename.substring(filename.lastIndexOf('.')) : "";
+                    while (dest.exists()) {
+                        dest = new File(dir, base + "_" + count + ext);
+                        count++;
+                    }
+                    out = new FileOutputStream(dest);
                 }
 
-                FileInputStream in = new FileInputStream(temp);
-                FileOutputStream out = new FileOutputStream(dest);
+                if (out == null) throw new Exception("No se pudo abrir salida");
+
+                in = new FileInputStream(temp);
                 byte[] buf = new byte[8192];
                 int len;
-                while ((len = in.read(buf)) != -1) out.write(buf, 0, len);
-                in.close();
-                out.close();
+                while ((len = in.read(buf)) != -1) {
+                    out.write(buf, 0, len);
+                }
+                out.flush();
                 temp.delete();
 
-                String finalName = dest.getName();
-                runOnUiThread(() -> Toast.makeText(this, "✓ Guardado en Descargas: " + finalName, Toast.LENGTH_SHORT).show());
+                runOnUiThread(() -> Toast.makeText(this, "✓ Guardado en Descargas: " + filename, Toast.LENGTH_SHORT).show());
             } catch (Exception e) {
-                runOnUiThread(() -> Toast.makeText(this, "Error al guardar archivo", Toast.LENGTH_SHORT).show());
+                runOnUiThread(() -> Toast.makeText(this, "Error al guardar: " + e.getMessage(), Toast.LENGTH_LONG).show());
+            } finally {
+                try { if (in != null) in.close(); } catch (Exception ignored) {}
+                try { if (out != null) out.close(); } catch (Exception ignored) {}
             }
         }).start();
     }
