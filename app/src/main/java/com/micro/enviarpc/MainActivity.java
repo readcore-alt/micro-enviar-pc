@@ -1,11 +1,13 @@
 package com.micro.enviarpc;
 
+import android.Manifest;
 import android.app.Activity;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.ContentValues;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.graphics.Color;
 import android.net.Uri;
@@ -51,7 +53,6 @@ public class MainActivity extends Activity {
     private boolean ignorarCambio = false;
     private DatagramSocket udpSocket = null;
 
-    // Servidor local para recibir de la PC
     private ServerSocket serverSocketRecibir = null;
     private boolean conectadoConPC = false;
     private static final int PUERTO_ESCUCHA = 8082;
@@ -61,6 +62,13 @@ public class MainActivity extends Activity {
         prefs = getSharedPreferences("config", MODE_PRIVATE);
         Intent intent = getIntent();
         boolean pedirConfirmacion = prefs.getBoolean("pedir_confirmacion", false);
+
+        // Pedir permiso de memoria en Android 6 a 9
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if (checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE, Manifest.permission.READ_EXTERNAL_STORAGE}, 100);
+            }
+        }
 
         if (Intent.ACTION_SEND.equals(intent.getAction()) && intent.getType() != null) {
             Uri uri = intent.getParcelableExtra(Intent.EXTRA_STREAM);
@@ -99,7 +107,6 @@ public class MainActivity extends Activity {
         btnConfirmarEnvio = findViewById(R.id.btnConfirmarEnvio);
         btnCancelarEnvio = findViewById(R.id.btnCancelarEnvio);
 
-        // Inyectar el botón 'Conectar' sutilmente junto a Guardar IP
         btnConectar = new Button(this);
         btnConectar.setText("Conectar");
         btnConectar.setTextColor(Color.WHITE);
@@ -151,12 +158,10 @@ public class MainActivity extends Activity {
             }
         });
 
-        // Crear socket UDP reutilizable
         new Thread(() -> {
             try { udpSocket = new DatagramSocket(); } catch (Exception ignored) {}
         }).start();
 
-        // Lógica Teclado en Vivo
         txtTecladoEnVivo.setText(" ");
         txtTecladoEnVivo.setSelection(1);
         txtTecladoEnVivo.addTextChangedListener(new TextWatcher() {
@@ -187,7 +192,6 @@ public class MainActivity extends Activity {
         ignorarCambio = false;
     }
 
-    // --- CONEXIÓN BIDIRECCIONAL CON LA PC ---
     private void toggleConexionPC() {
         if (conectadoConPC) {
             desconectarServidorLocal();
@@ -293,7 +297,6 @@ public class MainActivity extends Activity {
                     }
                 }
 
-                // 1. TEXTO RECIBIDO DE LA PC
                 if (encabezado.startsWith("POST /texto")) {
                     byte[] cuerpo = new byte[contentLength];
                     int leidos = 0;
@@ -312,7 +315,6 @@ public class MainActivity extends Activity {
                     return;
                 }
 
-                // 2. ARCHIVO RECIBIDO DE LA PC
                 if (encabezado.startsWith("POST /archivo")) {
                     File temp = new File(getCacheDir(), filename);
                     FileOutputStream fos = new FileOutputStream(temp);
@@ -385,7 +387,6 @@ public class MainActivity extends Activity {
         });
     }
 
-    // GUARDADO COMPATIBLE CON ANDROID 10+ (MediaStore)
     private void guardarArchivoDescargas(File temp, String filename) {
         new Thread(() -> {
             OutputStream out = null;
@@ -396,7 +397,7 @@ public class MainActivity extends Activity {
                     values.put(MediaStore.Downloads.DISPLAY_NAME, filename);
                     values.put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS);
                     Uri uri = getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
-                    if (uri == null) throw new Exception("Error al crear entrada en MediaStore");
+                    if (uri == null) throw new Exception("Error en MediaStore");
                     out = getContentResolver().openOutputStream(uri);
                 } else {
                     File dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
@@ -425,7 +426,7 @@ public class MainActivity extends Activity {
 
                 runOnUiThread(() -> Toast.makeText(this, "✓ Guardado en Descargas: " + filename, Toast.LENGTH_SHORT).show());
             } catch (Exception e) {
-                runOnUiThread(() -> Toast.makeText(this, "Error al guardar: " + e.getMessage(), Toast.LENGTH_LONG).show());
+                runOnUiThread(() -> Toast.makeText(this, "Error: " + e.getMessage(), Toast.LENGTH_LONG).show());
             } finally {
                 try { if (in != null) in.close(); } catch (Exception ignored) {}
                 try { if (out != null) out.close(); } catch (Exception ignored) {}
@@ -445,7 +446,6 @@ public class MainActivity extends Activity {
         });
     }
 
-    // --- MÉTODOS DE ENVÍO ORIGINALES A LA PC ---
     private void enviarTeclaUDP(String tecla) {
         String ip = prefs.getString("pc_ip", "");
         if (ip.isEmpty()) return;
